@@ -1,4 +1,4 @@
-# NORBIX-KUBE
+# PALESTRA-KUBE
 
 Portable workloads orchestrator within docker engine on-demand.
 
