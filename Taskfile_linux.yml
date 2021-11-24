@@ -1,0 +1,270 @@
+version: 3
+
+silent: true
+
+output: 'interleaved'
+
+vars:
+  #NOTE: vars interpolated
+  VENDOR: '{{ .GLOBAL_VENDOR | default "REPLACE" }}'
+
+  #NOTE: vars hard coded
+  KUBECTL_VERSION: '{{ "1.18.10" | default "REPLACE" }}'
+  HELM3_VERSION: '{{ "helm3-v0.133.0" | default "REPLACE" }}'
+  CENTOS_VERSION: '{{ "7" | default "REPLACE"}}'
+  AWSCLI_VERSION: '{{ "2.0.30" | default "REPLACE"}}'
+  DOCKER_CLIENT_VERSION: '{{ "19.03.8" | default "REPLACE" }}'
+  DOCKER_REGISTRY: '{{ "localhost:443" | default "REPLACE" }}'
+  SKAFFOLD_VERSION: '{{ "latest" | default "REPLACE" }}'
+  GOLANG_VERSION: '{{ "latest" | default "REPLACE" }}'
+  PYTHON2_VERSION: '{{ "2.7.18" | default "REPLACE"}}'
+  PYTHON3_VERSION: '{{ "3.9.0" | default "REPLACE"}}'
+  KUBECTL_COMMAND: 'docker run --name {{.VENDOR}}-kubectl -h {{.VENDOR}}-kubectl -u root:root
+                               -it
+                               -v $(pwd)/scripts/home/:/root:rw
+                               -v $(pwd)/KUBECONFIG/config.yml:/root/.kube/config:rw
+                               -v $(pwd)/../:/mnt/codebase/
+                               -v /etc/hosts:/mnt/hosts
+                               --rm
+                               --entrypoint=""
+                               -e HOME=/root
+                               -w /root
+                               --network=host
+                               bitnami/kubectl:{{.KUBECTL_VERSION}}'
+  HELM3_COMMAND: 'docker run --name {{.VENDOR}}-helm3 -h {{.VENDOR}}-helm3 -u root:root
+                             -it
+                             -v $(pwd)/scripts/home/:/root:rw
+                             -v $(pwd)/KUBECONFIG/config.yml:/root/.kube/config:rw
+                             -v $(pwd)/../:/mnt/codebase/
+                             -v /etc/hosts:/mnt/hosts
+                             --rm
+                             --entrypoint=""
+                             -e HOME="/root"
+                             -w /root
+                             --network=host
+                             quay.io/roboll/helmfile:{{.HELM3_VERSION}}'
+  CENTOS_COMMAND: 'docker run --name {{.VENDOR}}-centos{{.CENTOS_VERSION}} -h {{.VENDOR}}-centos{{.CENTOS_VERSION}} -u root:root
+                               -it
+                               -v $(pwd)/scripts/home/:/root:rw
+                               -v $(pwd)/../:/mnt/codebase/
+                               -v /etc/hosts:/mnt/hosts
+                               --rm
+                               --entrypoint=""
+                               -e HOME="/root"
+                               -w /root
+                               centos:{{.CENTOS_VERSION}}'
+  AWSCLI_COMMAND: 'docker run --name {{.VENDOR}}-awscli -h {{.VENDOR}}-awscli -u root:root
+                              --privileged=true
+                              -it
+                              -v $(pwd)/scripts/home/:/root:rw
+                              -v $(pwd)/../:/mnt/codebase/
+                              -v /etc/hosts:/mnt/hosts
+                              --rm
+                              --entrypoint=""
+                              -e HOME=/root
+                              -w /root
+                              ubuntu'
+  DOOD_COMMAND: 'docker run --name {{.VENDOR}}-dood
+                            -h {{.VENDOR}}-dood
+                            -it
+                            --rm
+                            --privileged
+                            --entrypoint=""
+                            -v $(pwd)/scripts/home/:/root:rw
+                            -v $(pwd)/../:/root/codebase/
+                            -v /var/run/docker.sock:/var/run/docker.sock
+                            -v /etc/hosts:/mnt/hosts
+                            -e DOCKER_OPTS="--insecure-registries {{.DOCKER_REGISTRY}}"
+                            -e HOME=/root
+                            -e SHELL=/bin/bash
+                            -w /root
+                            docker:{{.DOCKER_CLIENT_VERSION}}'
+  SKAFFOLD_COMMAND: 'docker run --name {{.VENDOR}}-skaffold
+                            -h {{.VENDOR}}-skaffold
+                            -it
+                            --rm
+                            --privileged
+                            --entrypoint=""
+                            -v $(pwd)/scripts/home/:/root:rw
+                            -v $(pwd)/../:/root/codebase/
+                            -v /var/run/docker.sock:/var/run/docker.sock
+                            -v /etc/hosts:/mnt/hosts
+                            -e HOME=/root
+                            -e SHELL=/bin/bash
+                            -w /root
+                            unuser/skaffold:{{.SKAFFOLD_VERSION}}'
+  GOLANG_COMMAND: 'docker run --name {{.VENDOR}}-golang
+                            -h {{.VENDOR}}-golang
+                            -it
+                            --rm
+                            --privileged
+                            --entrypoint=""
+                            -v $(pwd)/scripts/home/:/root:rw
+                            -v $(pwd)/../:/root/codebase/
+                            -v /var/run/docker.sock:/var/run/docker.sock
+                            -v /etc/hosts:/mnt/hosts
+                            -e HOME=/root
+                            -e SHELL=/bin/bash
+                            -w /root
+                            golang:{{.GOLANG_VERSION}}'
+  PYTHON2_COMMAND: 'docker run --name {{.VENDOR}}-python2 -h {{.VENDOR}}-python2 -u root:root
+                               -it
+                               -v $(pwd)/scripts/home/:/root:rw
+                               -v $(pwd)/../:/root/codebase/
+                               -v /etc/hosts:/mnt/hosts
+                               --rm
+                               --entrypoint=""
+                               -e HOME="/root"
+                               -w /root
+                               python:{{.PYTHON2_VERSION}}'
+  PYTHON3_COMMAND: 'docker run --name {{.VENDOR}}-python3 -h {{.VENDOR}}-python3 -u root:root
+                               -it
+                               -v $(pwd)/scripts/home/:/root:rw
+                               -v $(pwd)/../:/root/codebase/
+                               -v /etc/hosts:/mnt/hosts
+                               --rm
+                               --entrypoint=""
+                               -e HOME="/root"
+                               -w /root
+                               python:{{.PYTHON3_VERSION}}'
+
+tasks:
+  0001-k8s:kubectl-shell:
+    desc: 'Access to KUBECTL shell with TASK, KUBECTX, KUBENS and KREW plugin manager with the most common plugins and latest AWSCLI.'
+    cmds:
+      - "{{.KUBECTL_COMMAND}} sh -c 'apt-get update ;
+                                     apt-get install -y vim git bash-completion lolcat dnsutils jq gettext python3-pip;
+                                     cd codebase/ ;
+                                     (
+                                       set -x; cd \"$(mktemp -d)\" &&
+                                       curl -fsSLO \"https://github.com/kubernetes-sigs/krew/releases/latest/download/krew.tar.gz\" &&
+                                       tar zxvf krew.tar.gz &&
+                                       KREW=./krew-\"$(uname | tr '[:upper:]' '[:lower:]')_$(uname -m | sed -e 's/x86_64/amd64/' -e 's/arm.*$/arm/')\" &&
+                                       \"$KREW\" install krew
+                                      ) ;
+                                      (
+                                        curl -fsSLO \"https://storage.googleapis.com/knative-nightly/client/latest/kn-linux-amd64\" &&
+                                        mv kn-linux-amd64 /usr/local/bin/kn &&
+                                        chmod +x /usr/local/bin/kn
+                                      ) ;
+                                      export PATH=\"${PATH}:${HOME}/.krew/bin\" ;
+                                      kubectl krew install tree \
+                                                           who-can \
+                                                           grep \
+                                                           whoami \
+                                                           access-matrix \
+                                                           neat \
+                                                           view-allocations \
+                                                           view-utilization \
+                                                           resource-capacity \
+                                                           get-all \
+                                                           oidc-login \
+                                                           cert-manager ;
+                                      apt-get install -y kubectx ncurses-bin ;
+                                      cat /mnt/hosts >> /etc/hosts ;
+                                      sh -c \"$(curl --location https://taskfile.dev/install.sh)\" -- -d -b /usr/local/bin ;
+                                      (
+                                        pip3 install awscli &&
+                                        rm -rf /var/cache/apk/*
+                                      ) &&
+                                      bash'"
+
+  0001-k8s:helm3-shell:
+    desc: 'Access to HELMFILE wrapper with TASK, HELM v3, HELM-OPERATOR SDKs, AWSCLI and SECRETS plugin.'
+    cmds:
+      - "{{.HELM3_COMMAND}} sh -c 'apk update ;
+                                   apk upgrade ;
+                                   apk add --no-cache vim tree python3 py3-pip;
+                                   cat /mnt/hosts >> /etc/hosts ;
+                                   helm plugin install {{.HELM3_PLUGINS}}
+                                   (
+                                     set -x; cd \"$(mktemp -d)\" &&
+                                     curl -fsSLO \"https://github.com/operator-framework/operator-sdk/releases/download/v{{.OPERATOR_VERSION}}/helm-operator_linux_amd64\" &&
+                                     mv ./helm-operator_linux_amd64 /usr/local/bin/helm-operator &&
+                                     chmod +x /usr/local/bin/helm-operator
+                                   ) ;
+                                   (
+                                     curl -fsSLO \"https://storage.googleapis.com/knative-nightly/client/latest/kn-linux-amd64\" &&
+                                     mv kn-linux-amd64 /usr/local/bin/kn &&
+                                     chmod +x /usr/local/bin/kn
+                                   ) ;
+                                   (
+                                     pip3 install awscli &&
+                                     rm -rf /var/cache/apk/*
+                                   ) ;
+                                   git clone https://github.com/ahmetb/kubectx.git ~/.kubectx ;
+                                   sh -c \"$(curl --location https://taskfile.dev/install.sh)\" -- -d -b /usr/local/bin ;
+                                   bash'"
+    vars:
+      HELM3_PLUGINS: |
+        'https://github.com/zendesk/helm-secrets'
+        'https://github.com/adamreese/helm-env'
+        'https://github.com/technosophos/helm-template'
+
+  0001-k8s:kind-provisioner:
+    desc: 'Provision local k8s cluster {{ .KIND_CLUSTER_NAME }} via kind solution.'
+    cmds:
+      - ./cmd/kind_provisioner/main.sh provision {{.KIND_CLUSTER_NAME}}
+      - echo "export KUBECONFIG=$PWD/resources/kind_provisioner/config.yaml"
+    vars:
+      KIND_CLUSTER_NAME: 'devops.local'
+
+  0002-iac:awscli-shell:
+    desc: 'Access to AWSCLI shell (NOTE:interactive provisioner !!!).'
+    cmds:
+      - "{{.AWSCLI_COMMAND}} sh -c 'apt-get update ;
+                                    apt-get install unzip wget curl groff less bash -y ;
+                                    (
+                                     set -x; cd \"$(mktemp -d)\" &&
+                                     wget -q --show-progress \"https://awscli.amazonaws.com/awscli-exe-linux-x86_64-{{.AWSCLI_VERSION}}.zip\" &&
+                                     unzip awscli-exe-linux-x86_64-{{.AWSCLI_VERSION}}.zip &&
+                                     cd ./aws &&
+                                     ./install
+                                   ) &&
+                                   cat /mnt/hosts >> /etc/hosts &&
+                                   bash'"
+
+  0003-ci:dood-shell:
+    desc: 'Access to DOCKER in DOOD shell (DOCKER outside DOCKER) #non-secure with AWSCLI SDK.'
+    cmds:
+      - "{{.DOOD_COMMAND}} sh -c 'apk update;
+                                  apk upgrade;
+                                  apk add --no-cache curl jq git openssh-client bash python3 py3-pip;
+                                  (
+                                    pip3 install awscli &&
+                                    rm -rf /var/cache/apk/*
+                                  ) &&
+                                  bash'"
+  0003-ci:skaffold-shell:
+    desc: 'Access to skaffold shell.'
+    cmds:
+      - "{{.SKAFFOLD_COMMAND}} sh -c 'apk update;
+                                      apk add --no-cache openjdk11;
+                                      bash'"
+
+  0003-ci:golang-shell:
+    desc: 'Access to Golang and Gomplate, operator-sdk shell.'
+    cmds:
+      - "{{.GOLANG_COMMAND}} sh -c 'go get github.com/hairyhenderson/gomplate/v3/cmd/gomplate;
+                                    (
+                                      git clone https://github.com/operator-framework/operator-sdk &&
+                                      cd operator-sdk &&
+                                      git checkout master &&
+                                      make install
+                                    ) ;
+                                    bash'"
+
+  0004-runtimes:python2-shell:
+    desc: 'Access to PYTHON v2 shell and its IPYTHON repl.'
+    cmds:
+      - "{{.PYTHON2_COMMAND}} sh -c 'pip2 install pipenv ipython ; cat /mnt/hosts >> /etc/hosts ; bash'"
+
+  0004-runtimes:python3-shell:
+    desc: 'Access to PYTHON v3 shell and its IPYTHON repl.'
+    cmds:
+      - "{{.PYTHON3_COMMAND}} sh -c 'pip3 install pipenv ipython ; cat /mnt/hosts >> /etc/hosts ; bash'"
+
+  0005-other:centos-shell:
+    desc: 'Access to CENTOS v{{.CENTOS_VERSION}} shell.'
+    cmds:
+      - "{{.CENTOS_COMMAND}} sh -c 'bash'"

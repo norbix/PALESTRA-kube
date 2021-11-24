@@ -1,0 +1,124 @@
+version: 3
+
+silent: true
+
+output: 'interleaved'
+
+vars:
+  #NOTE: vars init via interpolation
+  VENDOR: '{{ .GLOBAL_VENDOR | default "REPLACE" }}'
+
+  #NOTE: vars init via association (hard coded)
+  KUBECTL_VERSION: '{{ "1.18.10" | default "REPLACE" }}'
+  HELM3_VERSION: '{{ "helm3-v0.133.0" | default "REPLACE" }}'
+  CENTOS_VERSION: '{{ "7" | default "REPLACE"}}'
+  AWSCLI_VERSION: '{{ "2.0.30" | default "REPLACE"}}'
+
+  KUBECTL_COMMAND: 'docker run --name {{.VENDOR}}-kubectl -h {{.VENDOR}}-kubectl -u root:root
+                               -it
+                               --rm
+                               -v {{.PATH_2_CODEBASE}}/scripts/home/:/root:rw
+                               -v {{.PATH_2_CODEBASE}}/KUBECONFIG/config.yml:/root/.kube/config:rw
+                               -v {{.PATH_2_CODEBASE}}/../:/mnt/codebase/
+                               --entrypoint=""
+                               -e HOME=/root
+                               -w /root
+                               --network=host
+                               bitnami/kubectl:{{.KUBECTL_VERSION}}'
+  HELM3_COMMAND: 'docker run --name {{.VENDOR}}-helm3 -h {{.VENDOR}}-helm3 -u root:root
+                             -it
+                             --rm
+                             -v {{.PATH_2_CODEBASE}}/scripts/home/:/root:rw
+                             -v {{.PATH_2_CODEBASE}}/KUBECONFIG/config.yml:/root/.kube/config:rw
+                             -v {{.PATH_2_CODEBASE}}/../:/mnt/codebase/
+                             --entrypoint=""
+                             -e HOME="/root"
+                             -w /root
+                             --network=host
+                             quay.io/roboll/helmfile:{{.HELM3_VERSION}}'
+  CENTOS_COMMAND: 'docker run --name {{.VENDOR}}-centos{{.CENTOS_VERSION}} -h {{.VENDOR}}-centos{{.CENTOS_VERSION}} -u root:root
+                               -it
+                               -v {{.PATH_2_CODEBASE}}/scripts/home:/root/scripts/home/:rw
+                               -v {{.PATH_2_CODEBASE}}/../:/mnt/codebase/
+                               --rm
+                               --entrypoint=""
+                               -e HOME="/root"
+                               -w /root
+                               centos:{{.CENTOS_VERSION}}'
+  AWSCLI_COMMAND: 'docker run --name {{.VENDOR}}-awscli -h {{.VENDOR}}-awscli -u root:root
+                              --privileged=true
+                              -it
+                              --rm
+                              --entrypoint=""
+                              -e HOME=/root
+                              -w /root
+                              ubuntu'
+
+tasks:
+  0001-k8s:kubectl-shell:
+    desc: 'Access to KUBECTL shell with TASK, KUBECTX, KUBENS and KREW plugin manager with the most common plugins.'
+    cmds:
+      - "{{.KUBECTL_COMMAND}} sh -c 'apt-get update ; apt-get install -y vim git bash-completion lolcat dnsutils jq gettext;
+                                       cd codebase/ ;
+                                       (
+                                         set -x; cd \"$(mktemp -d)\" &&
+                                         curl -fsSLO \"https://github.com/kubernetes-sigs/krew/releases/latest/download/krew.tar.gz\" &&
+                                         tar zxvf krew.tar.gz &&
+                                         KREW=./krew-\"$(uname | tr '[:upper:]' '[:lower:]')_$(uname -m | sed -e 's/x86_64/amd64/' -e 's/arm.*$/arm/')\" &&
+                                         \"$KREW\" install krew
+                                       ) ;
+                                       export PATH=\"${PATH}:${HOME}/.krew/bin\" ;
+                                       kubectl krew install tree \
+                                                            who-can \
+                                                            grep \
+                                                            whoami \
+                                                            access-matrix \
+                                                            neat \
+                                                            view-allocations \
+                                                            view-utilization \
+                                                            resource-capacity \
+                                                            get-all \
+                                                            oidc-login \
+                                                            cert-manager ;
+                                       apt-get install -y kubectx ncurses-bin ;
+                                       cat /mnt/hosts >> /etc/hosts ;
+                                       sh -c \"$(curl --location https://taskfile.dev/install.sh)\" -- -d -b /usr/local/bin ;
+                                       bash'"
+
+  0001-k8s:helm3-shell:
+    desc: 'Access to HELMFILE wrapper with TASK, HELM v3, HELM-OPERATOR SDKs and SECRETS plugin.'
+    cmds:
+      - "{{.HELM3_COMMAND}} sh -c 'apk update ; apk upgrade ; apk add --no-cache vim tree; cat /mnt/hosts >> /etc/hosts ;
+                                   helm plugin install {{.HELM3_PLUGINS}}
+                                   (
+                                     set -x; cd \"$(mktemp -d)\" &&
+                                     curl -fsSLO \"https://github.com/operator-framework/operator-sdk/releases/download/v{{.OPERATOR_VERSION}}/helm-operator_linux_amd64\" &&
+                                     mv ./helm-operator_linux_amd64 /usr/local/bin/helm-operator &&
+                                     chmod +x /usr/local/bin/helm-operator
+                                   ) ;
+                                   git clone https://github.com/ahmetb/kubectx.git ~/.kubectx ;
+                                   sh -c \"$(curl --location https://taskfile.dev/install.sh)\" -- -d -b /usr/local/bin ;
+                                   bash'"
+    vars:
+      HELM3_PLUGINS: |
+        'https://github.com/zendesk/helm-secrets'
+        'https://github.com/adamreese/helm-env'
+        'https://github.com/technosophos/helm-template'
+
+  0002-iac:awscli-shell:
+    desc: 'Access to AWSCLI shell (NOTE:interactive provisioner !!!).'
+    cmds:
+      - "{{.AWSCLI_COMMAND}} sh -c 'apt-get update ; apt-get install unzip wget curl groff less bash -y ;
+                                    (
+                                     set -x; cd \"$(mktemp -d)\" &&
+                                     wget -q --show-progress \"https://awscli.amazonaws.com/awscli-exe-linux-x86_64-{{.AWSCLI_VERSION}}.zip\" &&
+                                     unzip awscli-exe-linux-x86_64-{{.AWSCLI_VERSION}}.zip &&
+                                     cd ./aws &&
+                                     ./install
+                                   ) &&
+                                   cat /mnt/hosts >> /etc/hosts &&
+                                   bash'"
+  0005-other:centos-shell:
+    desc: 'Access to CENTOS v{{.CENTOS_VERSION}} shell.'
+    cmds:
+      - "{{.CENTOS_COMMAND}} sh -c 'bash'"

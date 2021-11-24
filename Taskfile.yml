@@ -1,0 +1,29 @@
+# https://taskfile.dev
+
+version: 3
+
+includes:
+  build: ./Taskfile_{{OS}}.yml
+
+silent: true
+
+output: 'interleaved'
+
+vars:
+  GLOBAL_VENDOR: 'palestra'
+
+tasks:
+  default:
+    label: 'default'
+    desc: 'List all commands defined.'
+    summary: |
+      [main] Orchestrates execution of other functions/tasks implemented.
+
+      It will provision/deploy a solution or execute a workflow in automatic fashion.
+    cmds:
+      - 'echo =='
+      - 'echo Tasks available 4 this {{.KUBE_TYPE}} KUBE.'
+      - 'echo'
+      - 'task -l'
+    vars:
+      KUBE_TYPE: 'infra'
