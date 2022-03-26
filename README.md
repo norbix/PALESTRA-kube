@@ -1,6 +1,6 @@
 # PALESTRA-KUBE
 
-Portable workloads orchestrator within docker engine on-demand.
+Portable and platform agnostic workloads orchestrator within docker engine on-demand.
 
 ## General info
 
